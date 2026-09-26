@@ -3,7 +3,10 @@ import json
 import requests
 
 
-API_URL = "https://hackathon-api-new-152590733511.northamerica-northeast2.run.app/api/generate"
+API_URL = (
+    "https://hackathon-api-new-152590733511."
+    "northamerica-northeast2.run.app/api/generate"
+)
 
 
 def ask_gemini(prompt, response_schema=None):
@@ -28,9 +31,9 @@ def ask_gemini(prompt, response_schema=None):
 
     data = response.json()
 
-    text = data["text"]
+    result = data["text"]
 
     if response_schema is not None:
-        text = json.loads(text)
+        result = json.loads(result)
 
-    return text, data["requests_remaining"]
+    return result, data["requests_remaining"]
