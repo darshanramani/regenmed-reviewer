@@ -17,9 +17,12 @@ from validators.discard_form import validate_discard_form
 # CONFIG
 # ============================================================
 
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+import os
+
+if os.name == "nt":
+    pytesseract.pytesseract.tesseract_cmd = (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    )
 
 st.set_page_config(
     page_title="RegenMed Internal Document Reviewer",
