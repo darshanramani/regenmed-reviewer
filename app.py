@@ -775,21 +775,324 @@ div[role="radiogroup"] label:has(input:checked) span {{
 
 
 /* ============================================================
-   FILE UPLOADER
+   PREMIUM DOCUMENT UPLOAD
 ============================================================ */
 
-[data-testid="stFileUploaderDropzone"] {{
-    background: {INPUT_BG} !important;
+.upload-shell {{
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(59,130,246,0.08),
+            rgba(56,189,248,0.04)
+        );
 
     border:
-        1px dashed {BORDER} !important;
+        1px solid rgba(59,130,246,0.18);
 
-    border-radius: 14px !important;
+    border-radius:
+        18px;
+
+    padding:
+        1.15rem 1.2rem 0.85rem 1.2rem;
+
+    margin-bottom:
+        0.55rem;
 }}
 
-[data-testid="stFileUploaderDropzoneInstructions"] span {{
+
+.upload-header-row {{
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        space-between;
+
+    gap:
+        1rem;
+}}
+
+
+.upload-eyebrow {{
+
     color:
-        {TEXT_SECONDARY} !important;
+        {PRIMARY} !important;
+
+    font-size:
+        0.66rem;
+
+    font-weight:
+        850;
+
+    letter-spacing:
+        0.12rem;
+
+    margin-bottom:
+        0.28rem;
+}}
+
+
+.upload-title {{
+
+    color:
+        {TEXT} !important;
+
+    font-size:
+        1rem;
+
+    font-weight:
+        850;
+
+    margin-bottom:
+        0.22rem;
+}}
+
+
+.upload-subtitle {{
+
+    color:
+        {MUTED} !important;
+
+    font-size:
+        0.79rem;
+
+    line-height:
+        1.45;
+}}
+
+
+.upload-badge {{
+
+    color:
+        {PRIMARY} !important;
+
+    background:
+        rgba(59,130,246,0.10);
+
+    border:
+        1px solid rgba(59,130,246,0.25);
+
+    border-radius:
+        999px;
+
+    padding:
+        0.33rem 0.62rem;
+
+    font-size:
+        0.64rem;
+
+    font-weight:
+        850;
+
+    white-space:
+        nowrap;
+}}
+
+
+/* Main Streamlit uploader */
+
+[data-testid="stFileUploader"] {{
+
+    background:
+        {CARD};
+
+    border:
+        1px solid {BORDER};
+
+    border-radius:
+        16px;
+
+    padding:
+        0.35rem;
+
+    box-shadow:
+        0 8px 24px rgba(15,23,42,0.06);
+
+    transition:
+        all 0.2s ease;
+}}
+
+
+[data-testid="stFileUploader"]:hover {{
+
+    border-color:
+        {PRIMARY};
+
+    box-shadow:
+        0 12px 30px rgba(37,99,235,0.12);
+
+    transform:
+        translateY(-1px);
+}}
+
+
+/* Drop zone */
+
+[data-testid="stFileUploaderDropzone"] {{
+
+    min-height:
+        145px !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            {CARD_2},
+            {CARD}
+        ) !important;
+
+    border:
+        1.5px dashed rgba(59,130,246,0.35) !important;
+
+    border-radius:
+        13px !important;
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        center;
+
+    transition:
+        all 0.2s ease;
+}}
+
+
+[data-testid="stFileUploaderDropzone"]:hover {{
+
+    background:
+        rgba(59,130,246,0.06) !important;
+
+    border-color:
+        {PRIMARY} !important;
+}}
+
+
+/* Drop zone instructions */
+
+[data-testid="stFileUploaderDropzoneInstructions"] {{
+
+    text-align:
+        center;
+}}
+
+
+[data-testid="stFileUploaderDropzoneInstructions"] span {{
+
+    color:
+        {TEXT} !important;
+
+    font-weight:
+        750 !important;
+}}
+
+
+[data-testid="stFileUploaderDropzoneInstructions"] small {{
+
+    color:
+        {MUTED} !important;
+}}
+
+
+/* Browse button */
+
+[data-testid="stFileUploaderDropzone"] button {{
+
+    background:
+        linear-gradient(
+            135deg,
+            {PRIMARY},
+            {ACCENT}
+        ) !important;
+
+    color:
+        white !important;
+
+    border:
+        none !important;
+
+    border-radius:
+        9px !important;
+
+    font-weight:
+        750 !important;
+
+    padding:
+        0.5rem 0.9rem !important;
+
+    box-shadow:
+        0 5px 14px rgba(37,99,235,0.20);
+}}
+
+
+[data-testid="stFileUploaderDropzone"] button:hover {{
+
+    transform:
+        translateY(-1px);
+
+    box-shadow:
+        0 7px 18px rgba(37,99,235,0.28);
+}}
+
+
+/* Uploaded file */
+
+[data-testid="stFileUploaderFile"] {{
+
+    background:
+        {CARD_2} !important;
+
+    border:
+        1px solid {BORDER} !important;
+
+    border-radius:
+        10px !important;
+
+    margin-top:
+        0.4rem !important;
+}}
+
+
+/* Bottom helper */
+
+.upload-helper {{
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    gap:
+        0.45rem;
+
+    margin-top:
+        0.4rem;
+
+    margin-bottom:
+        0.9rem;
+
+    color:
+        {MUTED} !important;
+
+    font-size:
+        0.70rem;
+
+    padding-left:
+        0.15rem;
+}}
+
+
+.upload-helper span {{
+
+    color:
+        {MUTED} !important;
 }}
 
 
@@ -2757,12 +3060,47 @@ with left_col:
     """)
 
 
-    uploaded_file = (
-        st.file_uploader(
-            "Upload RegenMed PDF",
-            type=["pdf"]
-        )
+    html("""
+    <div class="upload-shell">
+
+        <div class="upload-header-row">
+
+            <div>
+                <div class="upload-eyebrow">
+                    DOCUMENT INTAKE
+                </div>
+
+                <div class="upload-title">
+                    Upload RegenMed PDF
+                </div>
+
+                <div class="upload-subtitle">
+                    Add one scanned RegenMed form for automated review.
+                </div>
+            </div>
+
+            <div class="upload-badge">
+                PDF ONLY
+            </div>
+
+        </div>
+
+    </div>
+    """)
+
+    uploaded_file = st.file_uploader(
+        "Upload RegenMed PDF",
+        type=["pdf"],
+        label_visibility="collapsed"
     )
+
+    html("""
+    <div class="upload-helper">
+        <span>Maximum file size: 200 MB</span>
+        <span>•</span>
+        <span>Single PDF per review</span>
+    </div>
+    """)
 
 
     control_left, control_right = (
