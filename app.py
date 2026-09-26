@@ -19,6 +19,10 @@ from validators.discard_form import validate_discard_form
 
 import os
 
+if "HACKATHON_API_KEY" in st.secrets:
+    import os
+    os.environ["HACKATHON_API_KEY"] = st.secrets["HACKATHON_API_KEY"]
+
 if os.name == "nt":
     pytesseract.pytesseract.tesseract_cmd = (
         r"C:\Program Files\Tesseract-OCR\tesseract.exe"
