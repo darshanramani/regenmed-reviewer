@@ -2079,7 +2079,6 @@ DISCARD_SCHEMA = {
     ]
 }
 
-
 # ============================================================
 # PROMPTS
 # ============================================================
@@ -2087,29 +2086,76 @@ DISCARD_SCHEMA = {
 def detection_prompt(text):
 
     return f"""
-Identify this RegenMed document.
+You are identifying a RegenMed quality document from OCR text.
 
-Possible types:
+Your task is ONLY to classify the document type.
+
+Possible outputs:
 
 MP-F-023
 QS-F-049
 LOT_LOG
 DISCARD_FORM
 
-DISCARD_FORM means Tissue Discard Form.
+Important rules:
 
-LOT_LOG means Processing / Packaging Lot Log.
+1. Return exactly ONE of the four values above.
+2. Do not return explanations.
+3. Do not guess based on a single OCR word.
+4. Use multiple structural signals such as:
+   - form title
+   - form number
+   - section headings
+   - column names
+   - table structure
+   - footer text
+5. OCR may contain spelling errors, missing punctuation,
+   broken words, or imperfect handwriting recognition.
+6. Prefer the overall structure of the form over one
+   potentially incorrect OCR token.
 
-OCR may contain mistakes.
+Identification hints:
 
-Use the title, headings, labels,
-table structure and footer.
+MP-F-023 commonly contains concepts such as:
+- Donor #
+- Tissue Checked In
+- Operations Manager Review
+- Produced
+- Packaged
+- processing / production rows
 
-OCR:
+QS-F-049 commonly contains:
+- Reviewed By / Date
+- Technical
+- Quality
+- numbered review items
+- INC #
+- Status
+
+LOT_LOG commonly contains:
+- Lot Number
+- Exp. Date
+- Manufacturer
+- RegenMed Item
+- Qty Used
+- Load #
+- Sterilization Date
+- Packaging
+
+DISCARD_FORM commonly contains:
+- Tissue Discard
+- Discard Authorized By
+- Reason for Discard
+- Tissue Status
+- Graft ID
+- Tissue Discarded By
+- FreezerPro
+
+OCR TEXT:
 
 {text}
 
-Return ONLY:
+Return ONLY one of:
 
 MP-F-023
 QS-F-049
@@ -2121,43 +2167,118 @@ DISCARD_FORM
 def lot_log_prompt(text):
 
     return f"""
-Extract structured information from this RegenMed Lot Log.
+You are extracting data from a RegenMed Processing / Packaging Lot Log.
 
-Never intentionally invent values.
+This is a transcription task, not an interpretation task.
 
-If blank return "".
+STRICT EXTRACTION RULES:
 
-Return N/A only when explicitly written.
+1. Never guess or invent a value.
+2. Only return a value when it is directly supported by the OCR.
+3. If a value is blank, unreadable, ambiguous, or cannot be confidently
+   associated with the requested field, return "".
+4. Do not repair handwriting by guessing what the writer probably meant.
+5. Do not copy nearby values into another field.
+6. Do not move data between rows.
+7. Do not merge two rows together.
+8. Do not create rows that are not present in the document.
+9. Preserve visible values as closely as possible.
+10. Return "N/A" only when N/A, NA, N / A, or an obviously equivalent
+    notation is explicitly present in that specific field.
+11. A blank field must remain "".
+12. Do not decide whether the form passes or fails.
+13. Only extract data.
 
-PAGE 1 ITEM TABLE:
+The form contains SEPARATE sections.
+
+============================================================
+PAGE 1 - ITEM TABLE
+============================================================
+
+For every listed row in the Page 1 Item table extract:
 
 item
 lot_number
 exp_date
 manufacturer
 
-REGENMED ITEM TABLE:
+Important:
+
+- Keep each row separate.
+- A value belongs only to the row where it appears.
+- If an item is listed but one of the required cells is blank,
+  still include that row and return "" for the blank cell.
+- Do not exclude a row merely because it contains N/A.
+
+============================================================
+PAGE 1 - REGENMED ITEM TABLE
+============================================================
+
+For every listed RegenMed Item extract:
 
 item
 lot
 qty_used
 
-PAGE 2 ITEM TABLE:
+Important:
+
+- This is separate from the normal Page 1 Item table.
+- Do not move rows between these two sections.
+- Include listed rows even when Lot or Qty Used is blank.
+
+============================================================
+PAGE 2 - ITEM / EQUIPMENT TABLE
+============================================================
+
+Extract only rows belonging to the Page 2 table whose relevant columns are:
 
 item
 load_number
 sterilization_date
 
-PAGE 2 PACKAGING:
+CRITICAL:
+
+- This table is NOT the Packaging table.
+- Packaging material names must NEVER be returned in page_2_items.
+- A row belongs here only when it is structurally associated with
+  Load # and/or Sterilization Date.
+- Do not interpret Lot or Qty Used as Load # or Sterilization Date.
+- Include listed rows even when both fields appear blank.
+
+============================================================
+PAGE 2 - PACKAGING TABLE
+============================================================
+
+Extract only rows from the Packaging section.
+
+For every listed packaging row extract:
 
 item
 lot
 qty_used
 
-Do not intentionally mix Packaging rows
-with page_2_items.
+CRITICAL:
 
-OCR:
+- Packaging rows must NEVER appear in page_2_items.
+- page_2_items and packaging are separate tables.
+- Do not treat packaging Lot values as Load Numbers.
+- Do not treat packaging Qty Used values as Sterilization Dates.
+- If a packaging row is listed and a value is blank,
+  include the row and return "".
+
+============================================================
+FINAL CHECK BEFORE RETURNING JSON
+============================================================
+
+Before returning:
+
+- Verify that Packaging rows appear only in packaging.
+- Verify that Load # / Sterilization Date rows appear only in page_2_items.
+- Verify that Page 1 Item rows and RegenMed Item rows remain separate.
+- Do not fill missing values using information from another row.
+- Do not infer values from expected form patterns.
+
+OCR TEXT:
 
 {text}
 """
@@ -2166,34 +2287,271 @@ OCR:
 def qs_prompt(text):
 
     return f"""
-Extract structured information from RegenMed QS-F-049.
+You are extracting structured information from RegenMed form QS-F-049.
 
-Extract all numbered Technical and Quality review rows.
+This is a transcription and reconstruction task from noisy OCR.
 
-Return:
+Your goal is to recover the values that are visibly present in the form,
+while avoiding unsupported guesses.
+
+IMPORTANT:
+
+1. OCR may split initials and dates across nearby tokens or lines.
+2. OCR may misread separators such as:
+   /  -  .  |
+3. OCR may split a date into fragments.
+4. Use row structure, Technical/Quality column positions, and nearby OCR
+   context to reconstruct a value only when the association is clear.
+5. Never invent a value that is not supported by OCR evidence.
+6. If the value remains ambiguous after using row context, return "".
+7. Do not copy values from another numbered row.
+8. Do not swap Technical and Quality columns.
+9. Do not infer a date just because adjacent rows have similar dates.
+10. Do not decide PASS or FAIL.
+
+============================================================
+REVIEW ROWS
+============================================================
+
+For every numbered review item extract:
 
 item
+
 technical_initials
 technical_date
 technical_na
+
 quality_initials
 quality_date
 quality_na
 
-technical_na = true only when explicitly N/A.
+There should normally be one Technical review value
+and one Quality review value for each numbered row.
 
-quality_na = true only when explicitly N/A.
+Use the layout and OCR sequence to keep the two columns separate.
 
-Also extract Item 10:
+============================================================
+INITIALS
+============================================================
+
+Initials are usually short alphabetic values such as:
+
+MM
+LC
+AB
+
+If OCR breaks initials slightly but the row/column association is obvious,
+return the most directly supported transcription.
+
+If initials cannot be determined confidently, return "".
+
+============================================================
+DATES
+============================================================
+
+Dates are expected to represent MM/DD/YY.
+
+OCR may render dates as examples such as:
+
+11-27-24
+11.27.24
+11 27 24
+11|27|24
+112724
+
+If the OCR clearly contains all three date components and the row/column
+association is clear, reconstruct the date into:
+
+MM/DD/YY
+
+Examples:
+
+11-27-24 -> 11/27/24
+11.27.24 -> 11/27/24
+11 27 24 -> 11/27/24
+
+Do NOT create missing digits.
+
+If OCR contains incomplete or ambiguous digits, return "".
+
+============================================================
+N/A
+============================================================
+
+technical_na = true only when the Technical field explicitly indicates:
+
+N/A
+NA
+N / A
+NIA when clearly caused by OCR
+
+quality_na = true only when the Quality field explicitly indicates
+the same.
+
+If N/A is present:
+
+technical_initials or quality_initials should be ""
+technical_date or quality_date should be ""
+
+============================================================
+ITEM 10
+============================================================
+
+Extract:
 
 inc_number
 status
 
-If unreadable return "".
+Use only the Item 10 row.
 
-Do not intentionally invent values.
+If INC # is visibly present, extract it.
 
-OCR:
+If Status is visibly present next to it, extract it.
+
+Do not infer Status from another part of the form.
+
+============================================================
+FINAL CONSISTENCY CHECK
+============================================================
+
+Before returning:
+
+- Keep row numbers 1 through 10 separate.
+- Do not move dates between rows.
+- Do not move Technical values into Quality.
+- Do not move Quality values into Technical.
+- Reconstruct date punctuation only when all date digits are supported.
+- Prefer "" over unsupported guessing.
+
+OCR TEXT:
+
+{text}
+"""
+
+    return f"""
+You are extracting information from RegenMed form QS-F-049.
+
+This is a transcription task only.
+
+Do NOT determine whether the form passes validation.
+Python code will perform validation after extraction.
+
+STRICT RULES:
+
+1. Never invent, infer, or guess a value.
+2. Extract only information directly supported by OCR.
+3. If handwriting is unclear or ambiguous, return "".
+4. Do not move initials or dates between rows.
+5. Do not use the value from the row above or below.
+6. Keep Technical and Quality columns separate.
+7. Preserve dates exactly as read whenever possible.
+8. Do NOT automatically change "-", ".", or other separators to "/".
+9. Do not manufacture a date because the surrounding dates look similar.
+10. Return N/A only when it is explicitly written for that specific review.
+11. Blank is not the same as N/A.
+12. Include every numbered review row that is visible.
+
+============================================================
+REVIEW ROWS
+============================================================
+
+For each numbered review item extract:
+
+item
+
+technical_initials
+technical_date
+technical_na
+
+quality_initials
+quality_date
+quality_na
+
+Rules for technical_na:
+
+technical_na = true ONLY when the Technical review field explicitly
+contains N/A, NA, N / A, or clearly equivalent notation.
+
+Otherwise:
+
+technical_na = false
+
+Rules for quality_na:
+
+quality_na = true ONLY when the Quality review field explicitly
+contains N/A, NA, N / A, or clearly equivalent notation.
+
+Otherwise:
+
+quality_na = false
+
+IMPORTANT:
+
+If N/A is explicitly present:
+
+- do not invent initials
+- do not invent a date
+
+If initials are visible but the date is blank:
+
+return the initials
+return technical_date or quality_date as ""
+
+If the date is visible but initials are blank:
+
+return the date
+return initials as ""
+
+If a date appears as:
+
+09-25-24
+
+return:
+
+09-25-24
+
+Do NOT convert it to another format.
+
+If it appears:
+
+09.25.24
+
+return:
+
+09.25.24
+
+Preserve what OCR supports.
+
+============================================================
+ITEM 10
+============================================================
+
+Extract:
+
+inc_number
+status
+
+Rules:
+
+- Extract INC # only when directly visible.
+- Extract Status only from the Status field associated with Item 10.
+- Do not infer Status from surrounding text.
+- If INC # is present and Status is blank, return status as "".
+- Do not make a validation decision.
+
+============================================================
+FINAL CHECK
+============================================================
+
+Before returning:
+
+- Confirm Technical values have not been placed in Quality fields.
+- Confirm Quality values have not been placed in Technical fields.
+- Confirm dates have not been copied between rows.
+- Confirm N/A is true only when explicitly present.
+- Preserve uncertain fields as "" rather than guessing.
+
+OCR TEXT:
 
 {text}
 """
@@ -2202,46 +2560,136 @@ OCR:
 def mp_prompt(text):
 
     return f"""
-Extract structured information from RegenMed MP-F-023.
+You are extracting structured data from RegenMed form MP-F-023.
 
-TOP SECTION:
+This is a transcription task.
 
-Extract fields from Donor #
-through Tissue Checked In By/Date.
+Do NOT determine PASS or FAIL.
+Do NOT guess missing information.
 
-Normal fields:
+STRICT RULES:
+
+1. Never invent values.
+2. Return only information supported directly by OCR.
+3. If a field is blank, unreadable, or ambiguous, return "".
+4. Never copy a value from a neighboring field.
+5. Never move initials or dates between By/Date fields.
+6. Keep each processing-table row separate.
+7. Do not create rows that are not visible.
+8. Do not remove a listed row merely because it contains blanks.
+9. Preserve visible values as closely as possible.
+10. N/A may only be returned if explicitly written.
+
+============================================================
+TOP SECTION
+============================================================
+
+Extract all visible required fields beginning with:
+
+Donor #
+
+and continuing through:
+
+Tissue Checked In By / Date
+
+For ordinary fields return:
 
 top_fields
 
-By/Date fields:
+Each object:
+
+field
+value
+
+Important:
+
+- Use the printed field label as "field" where possible.
+- If a printed field exists but the handwritten/entered value is blank,
+  include the field with value "".
+
+============================================================
+BY / DATE FIELDS
+============================================================
+
+For every visible field containing a By / Date requirement,
+return it inside:
 
 by_date_fields
 
-OPERATIONS MANAGER REVIEW:
+Each object:
+
+field
+initials
+date
+
+Rules:
+
+- initials and date must be extracted separately.
+- Do not merge them into one value.
+- If only initials are visible:
+  initials = visible value
+  date = ""
+
+- If only date is visible:
+  initials = ""
+  date = visible value
+
+- Never copy a date from a nearby By/Date field.
+
+============================================================
+OPERATIONS MANAGER REVIEW
+============================================================
+
+Extract only the Operations Manager Review values:
 
 initials
 date
 
-PROCESSING TABLE:
+If either value is missing or unreadable, return "".
+
+Do not use another review signature/date as a substitute.
+
+============================================================
+PROCESSING / PRODUCTION TABLE
+============================================================
+
+For every relevant listed row extract:
 
 item
 produced
 packaged
 required_field
 
-required_field must be:
+required_field must be exactly one of:
 
 produced
-
-or
-
 packaged
 
-If unreadable return "".
+Use the visual/table structure and OCR evidence to determine
+which column is intended for that row.
 
-Do not intentionally invent information.
+Important:
 
-OCR:
+- A value in # Produced belongs only to produced.
+- A value in # Packaged belongs only to packaged.
+- Do not copy between columns.
+- Do not fill blank cells using neighboring rows.
+- If the required column cannot be determined confidently,
+  use the strongest printed table structure available.
+- Do not invent numeric quantities.
+
+============================================================
+FINAL CHECK
+============================================================
+
+Before returning:
+
+- Check that top fields remain separate from By/Date fields.
+- Check that Operations Manager Review was not taken from another signature.
+- Check that Produced and Packaged values were not swapped.
+- Keep unreadable information blank.
+
+OCR TEXT:
 
 {text}
 """
@@ -2250,37 +2698,102 @@ OCR:
 def discard_prompt(text):
 
     return f"""
-Extract structured information from a RegenMed Tissue Discard Form.
+You are extracting data from a RegenMed Tissue Discard Form.
 
-Never intentionally invent values.
+This is a transcription task only.
 
-TOP:
+Do NOT determine whether the form passes or fails.
+Validation will be performed by deterministic Python rules.
+
+STRICT RULES:
+
+1. Never guess or invent a value.
+2. Only return information directly supported by OCR.
+3. If handwriting is unreadable, uncertain, or ambiguous, return "".
+4. Do not copy information between tissue rows.
+5. Do not assume a checkbox is selected unless OCR/layout evidence
+   clearly indicates that it is marked.
+6. Do not infer Tissue Status from the Graft ID.
+7. Do not infer Graft ID from Tissue Status.
+8. Return N/A only when explicitly written.
+9. Blank and N/A are different.
+10. Do not manufacture names, dates, IDs, locations, or X marks.
+
+============================================================
+TOP SECTION
+============================================================
+
+Extract:
 
 donor_number
 discard_authorized_by
 discard_authorized_date
 reason_for_discard
 
-TISSUE STATUS:
+Rules:
+
+- Each field must come from its own labeled area.
+- If the field is present but blank, return "".
+- Do not combine Discard Authorized By and Date into one field.
+
+============================================================
+TISSUE STATUS
+============================================================
+
+Return:
 
 unprocessed_tissue
 in_processing_tissue
 unreleased_packaged_tissue
 released_packaged_tissue
 
-Set true only for visibly selected boxes.
+Each must be true or false.
 
-TISSUE ROWS:
+Set a value to true ONLY when its corresponding checkbox appears
+explicitly selected/marked.
+
+Do not infer which status should have been selected.
+
+If no checkbox can be confidently identified:
+
+all values should be false.
+
+Do not automatically force exactly one value to true.
+
+============================================================
+TISSUE ROWS
+============================================================
+
+For every actually listed tissue row extract:
 
 graft_id
 tissue_description
 storage_location
 confirmed_x
 
-confirmed_x is true only when the small X box
-for the listed tissue is visibly completed.
+Rules:
 
-BOTTOM:
+- Keep rows separate.
+- Do not combine multiple tissue descriptions.
+- Do not move a Graft ID into another row.
+- Do not use a storage location from another row.
+- confirmed_x = true ONLY when the small confirmation box/X
+  associated with that exact row appears completed.
+- If the row contains information but the confirmation mark cannot
+  be confidently identified, confirmed_x = false.
+- Do not create entirely empty rows.
+
+For Graft ID:
+
+- preserve an actual visible ID
+- return "N/A" only if explicitly written
+- return "" if blank/unreadable
+
+============================================================
+BOTTOM SECTION
+============================================================
+
+Extract:
 
 tissue_discarded_by
 confirmed_by
@@ -2290,13 +2803,30 @@ freezerpro_updated_date
 donor_chart_updated_by
 donor_chart_updated_date
 
-Return N/A only when explicitly written.
+Rules:
 
-OCR:
+- Extract each value only from its labeled field.
+- Do not reuse the same name/date across fields unless the OCR
+  explicitly shows that value in each field.
+- Preserve N/A when explicitly written.
+- Return "" when blank or unreadable.
+
+============================================================
+FINAL CHECK
+============================================================
+
+Before returning:
+
+- Do not infer Tissue Status from business logic.
+- Do not infer whether Graft ID should be N/A.
+- Do not infer missing X marks.
+- Do not fill blank bottom fields using neighboring signatures.
+- Keep uncertain values blank.
+
+OCR TEXT:
 
 {text}
 """
-
 
 # ============================================================
 # FORM DISPLAY NAME
